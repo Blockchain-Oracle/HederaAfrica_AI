@@ -9,11 +9,25 @@ A comprehensive collection of demos showcasing Hedera integrations, HCS-10 agent
 - Hedera testnet account with 20+ HBAR
 - OpenAI API key (for AI demos)
 
+### Getting API Keys and Credentials
+
+#### Hedera Account & Private Key
+1. Visit [Hedera Portal](https://portal.hedera.com/dashboard)
+2. Create an account or log in
+3. Generate testnet credentials (Account ID and Private Key)
+4. Fund your testnet account with HBAR using the faucet
+
+#### OpenAI API Key
+1. Visit [OpenAI Platform](https://platform.openai.com/)
+2. Create an account or log in
+3. Navigate to API keys section
+4. Generate a new API key for your project
+
 ### Setup
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/HederaAfricaDemo.git
-cd HederaAfricaDemo
+git clone https://github.com/Blockchain-Oracle/HederaAfrica_AI.git
+cd HederaAfrica_AI
 
 # Install dependencies
 pnpm install
