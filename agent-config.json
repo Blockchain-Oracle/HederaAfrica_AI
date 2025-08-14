@@ -1,9 +1,9 @@
 {
-  "name": "hello",
-  "accountId": "0.0.6502333",
-  "privateKey": "302e020100300506032b65700422042004afd9c415e6fc198cc4f1dac4fd92f86d45f5e0b19d767a62888e0154549b72",
-  "inboundTopicId": "0.0.6502335",
-  "outboundTopicId": "0.0.6502334",
-  "profileTopicId": "0.0.6502337",
-  "createdAt": "2025-08-05T14:40:39.234Z"
+  "name": "Bob",
+  "accountId": "0.0.6569231",
+  "privateKey": "302e020100300506032b6570042204201f04731de6eb49a748b50c4a890cf1e90447ba28a9ef4d0219c77638db5bb480",
+  "inboundTopicId": "0.0.6569234",
+  "outboundTopicId": "0.0.6569232",
+  "profileTopicId": "0.0.6569239",
+  "createdAt": "2025-08-13T17:12:52.164Z"
 }

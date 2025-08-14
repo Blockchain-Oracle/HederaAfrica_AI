@@ -39,8 +39,8 @@ async function main() {
       privateKey: process.env.DEMO_PRIVATE_KEY || process.env.HEDERA_PRIVATE_KEY!,
       network: 'testnet',
       openAIApiKey: process.env.OPENAI_API_KEY!,
-      operationalMode: 'returnBytes', // Return transaction bytes for user approval
-      userAccountId: process.env.HEDERA_ACCOUNT_ID!, // The user making requests
+      operationalMode: 'autonomous', // Return transaction bytes for user approval
+      userAccountId: process.env.DEMO_ACCOUNT_ID || process.env.HEDERA_ACCOUNT_ID!, // The user making requests
       verbose: true
     });
 

@@ -7,6 +7,36 @@ import * as path from 'path';
 
 const logger = new DemoLogger('RegisterAgent');
 
+async function updateEnvFile(envFilePath: string, variables: Record<string, string>): Promise<void> {
+  let envContent = '';
+
+  try {
+    envContent = await fs.readFile(envFilePath, 'utf8');
+  } catch (error) {
+    // File doesn't exist, start with empty content
+  }
+
+  const envLines = envContent.split('\n');
+  const updatedLines = [...envLines];
+
+  for (const [key, value] of Object.entries(variables)) {
+    const lineIndex = updatedLines.findIndex(line => line.startsWith(`${key}=`));
+
+    if (lineIndex !== -1) {
+      updatedLines[lineIndex] = `${key}=${value}`;
+    } else {
+      updatedLines.push(`${key}=${value}`);
+    }
+  }
+
+  // Ensure file ends with newline
+  if (updatedLines[updatedLines.length - 1] !== '') {
+    updatedLines.push('');
+  }
+
+  await fs.writeFile(envFilePath, updatedLines.join('\n'));
+}
+
 async function main() {
   displayHeader('HCS-10 Agent Registration Demo', 
     'Register an AI agent on the Hedera network using the HCS-10 standard'
@@ -18,8 +48,31 @@ async function main() {
   // Get agent details from user
   logger.info('Let\'s create your AI agent profile:');
   
-  const agentName = getUserInput('Agent name (e.g., DataBot): ') || 'HackathonBot';
-  const agentDescription = getUserInput('Agent description: ') || 'Hedera Africa Hackathon Demo Agent';
+  // Ask for agent type first
+  logger.info('\nSelect agent type:');
+  logger.info('1. Alice (Connection Initiator)');
+  logger.info('2. Bob (Connection Listener)'); 
+  logger.info('3. Custom Agent');
+  
+  const agentTypeInput = getUserInput('Agent type (1-3): ') || '3';
+  
+  let agentName = '';
+  let agentDescription = '';
+  let envPrefix = 'DEMO';
+  
+  if (agentTypeInput === '1') {
+    agentName = 'Alice';
+    agentDescription = 'Connection initiator agent for demos';
+    envPrefix = 'ALICE';
+  } else if (agentTypeInput === '2') {
+    agentName = 'Bob';
+    agentDescription = 'Connection listener agent for demos';
+    envPrefix = 'BOB';
+  } else {
+    agentName = getUserInput('Agent name (e.g., DataBot): ') || 'HackathonBot';
+    agentDescription = getUserInput('Agent description: ') || 'Hedera Africa Hackathon Demo Agent';
+    envPrefix = 'DEMO';
+  }
   
   logger.info('\nSelect agent capabilities (comma-separated numbers):');
   logger.info('1. Text Generation');
@@ -86,6 +139,9 @@ async function main() {
     // Create and register agent
     logger.step(3, 'Creating and registering agent');
     let agent;
+    let capturedMetadata: any = {};
+    let metadata: any = {};
+    
     try {
       agent = await withSpinner('Registering agent on Hedera...', async () => {
         return hcs10Client.createAndRegisterAgent(agentBuilder, {
@@ -94,6 +150,26 @@ async function main() {
             if (data.progressPercent !== undefined) {
               logger.info(`Progress: ${data.progressPercent}%`);
             }
+            
+            // Capture metadata as it becomes available
+            if (data.details) {
+              if (data.details.account?.accountId) {
+                capturedMetadata.accountId = data.details.account.accountId;
+              }
+              if (data.details.account?.privateKey) {
+                capturedMetadata.privateKey = data.details.account.privateKey;
+              }
+              if (data.details.outboundTopicId) {
+                capturedMetadata.outboundTopicId = data.details.outboundTopicId;
+              }
+              if (data.details.inboundTopicId) {
+                capturedMetadata.inboundTopicId = data.details.inboundTopicId;
+              }
+              if (data.details.profileTopicId) {
+                capturedMetadata.profileTopicId = data.details.profileTopicId;
+              }
+            }
+            
             // Show transaction IDs as they happen
             if (data.details?.transactionId) {
               displayResult('Transaction', `https://hashscan.io/testnet/transaction/${data.details.transactionId}`);
@@ -108,12 +184,14 @@ async function main() {
       logger.divider();
       logger.info('Agent Registration Complete!');
       
-      // Check if we got metadata
-      if (!agent.metadata) {
-        throw new Error('Registration failed - no metadata returned');
-      }
+      // Use SDK metadata if available, otherwise use captured metadata
+      metadata = agent.metadata || capturedMetadata;
       
-      const metadata = agent.metadata;
+      if (!metadata || !metadata.accountId) {
+        logger.error('Registration failed - no metadata available');
+        logger.info('This might be due to network timing issues');
+        return;
+      }
       
       // Show actual registration details
       displayResult('Agent Name', agentName);
@@ -136,17 +214,36 @@ async function main() {
     logger.step(4, 'Saving agent configuration');
     const agentConfig = {
       name: agentName,
-      accountId: agent.metadata?.accountId,
-      privateKey: agent.metadata?.privateKey,
-      inboundTopicId: agent.metadata?.inboundTopicId,
-      outboundTopicId: agent.metadata?.outboundTopicId,
-      profileTopicId: agent.metadata?.profileTopicId,
+      accountId: metadata.accountId,
+      privateKey: metadata.privateKey,
+      inboundTopicId: metadata.inboundTopicId,
+      outboundTopicId: metadata.outboundTopicId,
+      profileTopicId: metadata.profileTopicId,
       createdAt: new Date().toISOString()
     };
 
     const configPath = path.join(process.cwd(), 'agent-config.json');
-    await fs.writeFile(configPath, JSON.stringify(agentConfig, null, 2));
+
     logger.success(`Agent configuration saved to: ${configPath}`);
+
+    // Update .env file for easy reuse
+    if (metadata.accountId) {
+      const envUpdates: Record<string, string> = {
+        [`${envPrefix}_ACCOUNT_ID`]: metadata.accountId,
+        [`${envPrefix}_PRIVATE_KEY`]: metadata.privateKey || '',
+        [`${envPrefix}_INBOUND_TOPIC_ID`]: metadata.inboundTopicId,
+        [`${envPrefix}_OUTBOUND_TOPIC_ID`]: metadata.outboundTopicId
+      };
+      
+      // Add profile topic if available
+      if (metadata.profileTopicId) {
+        envUpdates[`${envPrefix}_PROFILE_TOPIC_ID`] = metadata.profileTopicId;
+      }
+      
+      const envFilePath = path.join(process.cwd(), '.env');
+      await updateEnvFile(envFilePath, envUpdates);
+      logger.success('Environment variables updated for easy reuse');
+    }
 
     // Show next steps
     console.log('\n📋 Next Steps:');
@@ -154,34 +251,6 @@ async function main() {
     console.log('2. Update profile: pnpm run 02:profile');
     console.log('3. Connect to agents: pnpm run 03:connect');
     console.log('4. Send messages: pnpm run 03:messages');
-
-    // Update .env file for easy reuse
-    if (agent.metadata) {
-      const envUpdates: Record<string, string> = {
-        [`DEMO_ACCOUNT_ID`]: agent.metadata.accountId,
-        [`DEMO_PRIVATE_KEY`]: agent.metadata.privateKey,
-        [`DEMO_INBOUND_TOPIC_ID`]: agent.metadata.inboundTopicId,
-        [`DEMO_OUTBOUND_TOPIC_ID`]: agent.metadata.outboundTopicId
-      };
-      
-      // Simple env update (in production use a proper parser)
-      let envContent = '';
-      try {
-        envContent = await fs.readFile('.env', 'utf-8');
-      } catch {}
-      
-      Object.entries(envUpdates).forEach(([key, value]) => {
-        const regex = new RegExp(`^${key}=.*$`, 'm');
-        if (envContent.match(regex)) {
-          envContent = envContent.replace(regex, `${key}=${value}`);
-        } else {
-          envContent += `\n${key}=${value}`;
-        }
-      });
-      
-      await fs.writeFile('.env', envContent);
-      logger.success('Environment variables updated for easy reuse');
-    }
 
   } catch (error) {
     logger.error('Agent registration failed', error);

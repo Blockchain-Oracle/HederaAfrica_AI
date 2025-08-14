@@ -3,8 +3,48 @@ import { createHederaClient } from '../utils/hedera-client';
 import { DemoLogger } from '../utils/logger';
 import { displayHeader, withSpinner, displayResult, getUserInput, waitForUserInput, sleep } from '../utils/demo-helpers';
 import { Hbar } from '@hashgraph/sdk';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 
 const logger = new DemoLogger('ConnectAgents');
+
+async function loadAgentConfig() {
+  try {
+    const configPath = path.join(process.cwd(), 'agent-config.json');
+    const configContent = await fs.readFile(configPath, 'utf-8');
+    return JSON.parse(configContent);
+  } catch (error) {
+    logger.info('No agent-config.json found, using environment variables');
+    return null;
+  }
+}
+
+async function getAgentFromEnv(
+  agentName: string,
+  envPrefix: string,
+): Promise<{accountId: string, privateKey: string, inboundTopicId: string, outboundTopicId: string} | null> {
+  const accountIdEnvVar = `${envPrefix}_ACCOUNT_ID`;
+  const privateKeyEnvVar = `${envPrefix}_PRIVATE_KEY`;
+  const inboundTopicIdEnvVar = `${envPrefix}_INBOUND_TOPIC_ID`;
+  const outboundTopicIdEnvVar = `${envPrefix}_OUTBOUND_TOPIC_ID`;
+
+  const accountId = process.env[accountIdEnvVar];
+  const privateKey = process.env[privateKeyEnvVar];
+  const inboundTopicId = process.env[inboundTopicIdEnvVar];
+  const outboundTopicId = process.env[outboundTopicIdEnvVar];
+
+  if (!accountId || !privateKey || !inboundTopicId || !outboundTopicId) {
+    logger.info(`${agentName} agent not found in environment variables`);
+    return null;
+  }
+
+  return {
+    accountId,
+    privateKey,
+    inboundTopicId,
+    outboundTopicId
+  };
+}
 
 async function monitorConnectionConfirmation(
   client: HCS10Client,
@@ -34,9 +74,55 @@ async function main() {
     'Connect to other HCS-10 agents'
   );
 
-  // Use demo account if available, otherwise use main account
-  const operatorId = process.env.DEMO_ACCOUNT_ID || process.env.HEDERA_ACCOUNT_ID!;
-  const operatorPrivateKey = process.env.DEMO_PRIVATE_KEY || process.env.HEDERA_PRIVATE_KEY!;
+  // Ask which agent to use for connecting
+  logger.info('Which agent should initiate the connection?');
+  logger.info('1. Alice (ALICE_*)');
+  logger.info('2. Bob (BOB_*)');
+  logger.info('3. Main Account (HEDERA_*)');
+  
+  const agentChoice = getUserInput('Choose agent (1-3): ') || '1';
+  
+  let agentData;
+  if (agentChoice === '1') {
+    agentData = await getAgentFromEnv('Alice', 'ALICE');
+  } else if (agentChoice === '2') {
+    agentData = await getAgentFromEnv('Bob', 'BOB');
+  } else {
+    agentData = null; // Will fall back to main account
+  }
+  
+  // If not found in env, try agent config file
+  if (!agentData) {
+    const agentConfig = await loadAgentConfig();
+    if (agentConfig && agentConfig.accountId && agentConfig.privateKey) {
+      agentData = {
+        accountId: agentConfig.accountId,
+        privateKey: agentConfig.privateKey,
+        inboundTopicId: agentConfig.inboundTopicId,
+        outboundTopicId: agentConfig.outboundTopicId
+      };
+      logger.info('Using agent configuration from agent-config.json');
+    }
+  }
+  
+  // Fallback to main Hedera account
+  if (!agentData) {
+    if (!process.env.HEDERA_ACCOUNT_ID || !process.env.HEDERA_PRIVATE_KEY) {
+      logger.error('No agent configuration found and no Hedera account configured');
+      logger.info('Please run agent registration first or set HEDERA_* environment variables');
+      process.exit(1);
+    }
+    agentData = {
+      accountId: process.env.HEDERA_ACCOUNT_ID,
+      privateKey: process.env.HEDERA_PRIVATE_KEY,
+      inboundTopicId: '',
+      outboundTopicId: ''
+    };
+    logger.info('Using main Hedera account (no agent topics available)');
+  }
+
+  const operatorId = agentData.accountId;
+  const operatorPrivateKey = agentData.privateKey;
   
   logger.step(1, 'Initializing HCS-10 client');
   const hcs10Client = await withSpinner('Setting up HCS-10 client...', async () => {

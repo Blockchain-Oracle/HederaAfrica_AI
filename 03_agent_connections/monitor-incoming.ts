@@ -1,11 +1,30 @@
 import { HCS10Client, Logger, FeeConfigBuilder } from '@hashgraphonline/standards-sdk';
 import { DemoLogger } from '../utils/logger';
-import { displayHeader, displayResult, getUserChoice } from '../utils/demo-helpers';
+import { displayHeader, displayResult, getUserChoice, getUserInput } from '../utils/demo-helpers';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import * as dotenv from 'dotenv';
 
 dotenv.config();
 
 const logger = new DemoLogger('MonitorIncoming');
+
+async function getAgentFromEnv(
+  agentName: string,
+  envPrefix: string,
+): Promise<{accountId: string, privateKey: string, inboundTopicId: string, outboundTopicId: string} | null> {
+  const accountId = process.env[`${envPrefix}_ACCOUNT_ID`];
+  const privateKey = process.env[`${envPrefix}_PRIVATE_KEY`];
+  const inboundTopicId = process.env[`${envPrefix}_INBOUND_TOPIC_ID`];
+  const outboundTopicId = process.env[`${envPrefix}_OUTBOUND_TOPIC_ID`];
+
+  if (!accountId || !privateKey || !inboundTopicId || !outboundTopicId) {
+    logger.info(`${agentName} agent not found in environment variables`);
+    return null;
+  }
+
+  return { accountId, privateKey, inboundTopicId, outboundTopicId };
+}
 
 async function monitorIncomingRequests(
   client: HCS10Client,
@@ -115,11 +134,29 @@ async function main() {
     'Accept connection requests from other agents'
   );
 
+  // Ask which agent should monitor for connections
+  logger.info('Which agent should listen for connections?');
+  logger.info('1. Bob (BOB_*)');
+  logger.info('2. Demo (DEMO_*)');
+  
+  const agentChoice = getUserInput('Choose agent (1-2): ') || '1';
+  
+  let agentData;
+  if (agentChoice === '1') {
+    agentData = await getAgentFromEnv('Bob', 'BOB');
+  } else {
+    agentData = await getAgentFromEnv('Demo', 'DEMO');
+  }
+  
+  if (!agentData) {
+    logger.error('No agent configuration found');
+    logger.info('Please run agent registration first: pnpm run 02:register');
+    process.exit(1);
+  }
+
   try {
-    // Initialize client
-    const accountId = process.env.DEMO_ACCOUNT_ID || process.env.HEDERA_ACCOUNT_ID;
-    const privateKey = process.env.DEMO_PRIVATE_KEY || process.env.HEDERA_PRIVATE_KEY;
-    const inboundTopicId = process.env.DEMO_INBOUND_TOPIC_ID;
+    // Initialize client using selected agent data
+    const { accountId, privateKey, inboundTopicId } = agentData;
 
     if (!accountId || !privateKey) {
       throw new Error('Account credentials not found. Run 02:register first to create an agent.');

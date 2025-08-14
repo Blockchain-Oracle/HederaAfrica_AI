@@ -25,8 +25,7 @@
     "07:nft": "ts-node 07_token_operations/create-nft.ts",
     "08:schedule": "ts-node 08_scheduled_transactions/schedule-transfer.ts",
     "09:hgraph": "ts-node 09_data_analysis/hgraph-queries.ts",
-    "10:launch": "ts-node 10_meme_tokens/launch-token.ts",
-    "11:multi": "ts-node 11_advanced_patterns/multi-agent-chat.ts"
+    "10:launch": "ts-node 10_meme_tokens/launch-token.ts"
   },
   "keywords": ["hedera", "hcs-10", "ai-agents", "blockchain", "demo"],
   "author": "Hedera Africa Hackathon",
